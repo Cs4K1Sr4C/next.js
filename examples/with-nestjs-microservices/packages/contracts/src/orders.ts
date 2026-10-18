@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { z } from "zod";
 
 // Schemas are shared by every edge that accepts input (the Server Action in
 // `apps/web`, the HTTP gateway and the orders service), so validation rules
@@ -12,11 +12,11 @@ export const CreateOrderInput = z.object({
     .max(64)
     .regex(/^[A-Za-z0-9-]+$/, 'SKU may only contain letters, digits and "-"'),
   quantity: z.coerce.number().int().min(1).max(100),
-})
-export type CreateOrderInput = z.infer<typeof CreateOrderInput>
+});
+export type CreateOrderInput = z.infer<typeof CreateOrderInput>;
 
-export const OrderStatus = z.enum(['pending', 'fulfilled'])
-export type OrderStatus = z.infer<typeof OrderStatus>
+export const OrderStatus = z.enum(["pending", "fulfilled"]);
+export type OrderStatus = z.infer<typeof OrderStatus>;
 
 export const Order = z.object({
   id: z.uuid(),
@@ -26,8 +26,8 @@ export const Order = z.object({
   status: OrderStatus,
   createdAt: z.iso.datetime(),
   fulfilledAt: z.iso.datetime().nullable(),
-})
-export type Order = z.infer<typeof Order>
+});
+export type Order = z.infer<typeof Order>;
 
 /**
  * Client-chosen key that makes `POST /orders` safe to retry. Replaying the
@@ -38,14 +38,14 @@ export const IdempotencyKey = z
   .string()
   .min(8)
   .max(128)
-  .regex(/^[A-Za-z0-9_-]+$/)
+  .regex(/^[A-Za-z0-9_-]+$/);
 
 export interface ListOrdersResponse {
-  orders: Order[]
+  orders: Order[];
 }
 
 export interface CreateOrderResponse {
-  order: Order
+  order: Order;
   /** `true` when the idempotency key matched an earlier request. */
-  replayed: boolean
+  replayed: boolean;
 }
