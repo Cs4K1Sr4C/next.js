@@ -1,0 +1,22 @@
+{
+  "name": "@example/web",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "@example/contracts": "workspace:*",
+    "next": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "server-only": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^6.0.2"
+  }
+}
