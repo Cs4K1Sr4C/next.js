@@ -120,6 +120,8 @@ export class LRUCache<T> {
    * Sets a key-value pair in the cache.
    * If the key exists, updates the value and moves to head.
    * If new, adds at head and evicts from tail if necessary.
+   * If the value is larger than maxSize, it is not stored, any existing entry
+   * for the key is evicted, and false is returned.
    *
    * Time Complexity:
    * - O(1) for uniform item sizes
@@ -135,6 +137,16 @@ export class LRUCache<T> {
     }
     if (size > this.maxSize) {
       console.warn('Single item size exceeds maxSize')
+      // The caller is replacing this key, so the previous value is superseded
+      // and must not be served anymore. Drop it as an eviction so that owners
+      // of per-entry resources (e.g. files on disk) can release them.
+      const existing = this.cache.get(key)
+      if (existing) {
+        this.removeNode(existing)
+        this.cache.delete(key)
+        this.totalSize -= existing.size
+        this.onEvict?.(key, existing.data)
+      }
       return false
     }
 

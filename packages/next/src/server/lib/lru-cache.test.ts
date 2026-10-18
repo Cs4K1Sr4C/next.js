@@ -155,6 +155,33 @@ describe('LRUCache', () => {
       consoleSpy.mockRestore()
     })
 
+    it('should drop the existing entry when it is replaced by an item larger than max size', () => {
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+      const cache = new LRUCache<string>(5, (value) => value.length)
+
+      expect(cache.set('key1', 'ab')).toBe(true) // size 2
+      expect(cache.set('key2', 'c')).toBe(true) // size 1, total = 3
+
+      // size 8 > maxSize 5. The new value is rejected, and the previous value
+      // for 'key1' is superseded, so it must not be served anymore.
+      expect(cache.set('key1', 'toolarge')).toBe(false)
+
+      expect(cache.get('key1')).toBeUndefined()
+      expect(cache.has('key1')).toBe(false)
+      expect(cache.has('key2')).toBe(true)
+      expect(cache.get('key2')).toBe('c')
+      expect(cache.size).toBe(1)
+      expect(cache.currentSize).toBe(1)
+      expect([...cache]).toEqual([['key2', 'c']])
+
+      // The cache stays usable for the dropped key.
+      expect(cache.set('key1', 'de')).toBe(true)
+      expect(cache.get('key1')).toBe('de')
+      expect(cache.currentSize).toBe(3)
+
+      consoleSpy.mockRestore()
+    })
+
     it('should update size when overwriting existing keys', () => {
       const cache = new LRUCache<string>(10, (value) => value.length)
 
@@ -287,6 +314,34 @@ describe('LRUCache', () => {
       cache.set('a', 'value-a')
       cache.set('a', 'new-value-a')
       expect(evicted.length).toBe(0)
+    })
+
+    it('should call onEvict for an existing entry replaced by an item larger than max size', () => {
+      const consoleSpy = jest.spyOn(console, 'warn').mockImplementation()
+      const evicted: Array<{ key: string; value: string }> = []
+      const cache = new LRUCache<string>(
+        5,
+        (value) => value.length,
+        (key, value) => {
+          evicted.push({ key, value })
+        }
+      )
+
+      cache.set('a', 'ab') // size 2
+      cache.set('b', 'c') // size 1
+
+      // A new key that is too large has nothing to evict.
+      expect(cache.set('new', 'toolarge')).toBe(false)
+      expect(evicted).toEqual([])
+
+      // Replacing an existing key with a too large value drops the old value,
+      // so owners of per-entry resources get a chance to release them.
+      expect(cache.set('a', 'toolarge')).toBe(false)
+      expect(evicted).toEqual([{ key: 'a', value: 'ab' }])
+      expect(cache.has('a')).toBe(false)
+      expect(cache.has('b')).toBe(true)
+
+      consoleSpy.mockRestore()
     })
 
     it('should call onEvict for each evicted entry when multiple are evicted', () => {
