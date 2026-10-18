@@ -225,12 +225,19 @@ export const encryptActionBoundArgs = React.cache(
     const cachedEncrypted = resumeDataCache?.encryptedBoundArgs.get(cacheKey)
 
     if (cachedEncrypted) {
+      // The read was started above or by the hangingInputAbortSignal, so we
+      // need to end it here too.
+      endReadIfStarted()
       return cachedEncrypted
     }
 
-    const encrypted = await encodeActionBoundArg(actionId, serialized)
+    let encrypted: string
+    try {
+      encrypted = await encodeActionBoundArg(actionId, serialized)
+    } finally {
+      endReadIfStarted()
+    }
 
-    endReadIfStarted()
     if (resumeDataCache?.mutable) {
       resumeDataCache.encryptedBoundArgs.set(cacheKey, encrypted)
     }
