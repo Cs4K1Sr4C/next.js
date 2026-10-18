@@ -815,11 +815,10 @@ export class IncrementalCache implements IncrementalCacheType {
       handlerContext = responseContext
     }
 
-    // FetchCache has upper limit of 2MB per-entry currently
-    const itemSize = JSON.stringify(data).length
+    // FetchCache has upper limit of 2MB per-entry currently. Only serialize the
+    // entry to measure it when that limit applies.
     if (
       ctx.fetchCache &&
-      itemSize > 2 * 1024 * 1024 &&
       // We ignore the size limit when custom cache handler is being used, as it
       // might not have this limit
       !this.hasCustomCacheHandler &&
@@ -827,13 +826,16 @@ export class IncrementalCache implements IncrementalCacheType {
       // caching that the user isn't even aware of.
       !ctx.isImplicitBuildTimeCache
     ) {
-      const warningText = `Failed to set Next.js data cache for ${ctx.fetchUrl || pathname}, items over 2MB can not be cached (${itemSize} bytes)`
+      const itemSize = JSON.stringify(data).length
+      if (itemSize > 2 * 1024 * 1024) {
+        const warningText = `Failed to set Next.js data cache for ${ctx.fetchUrl || pathname}, items over 2MB can not be cached (${itemSize} bytes)`
 
-      if (this.dev) {
-        throw new Error(warningText)
+        if (this.dev) {
+          throw new Error(warningText)
+        }
+        console.warn(warningText)
+        return
       }
-      console.warn(warningText)
-      return
     }
 
     try {
