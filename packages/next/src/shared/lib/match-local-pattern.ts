@@ -1,6 +1,19 @@
 import type { LocalPattern } from './image-config'
 import { makeRe } from 'next/dist/compiled/picomatch'
 
+// Globs only come from next.config, so this cache stays bounded. makeRe()
+// never sets the g/y flags, so a compiled RegExp can be reused across .test().
+const pathnameRes = new Map<string, RegExp>()
+
+function pathnameRe(glob: string): RegExp {
+  let re = pathnameRes.get(glob)
+  if (!re) {
+    re = makeRe(glob, { dot: true })
+    pathnameRes.set(glob, re)
+  }
+  return re
+}
+
 // Modifying this function should also modify writeImagesManifest()
 export function matchLocalPattern(pattern: LocalPattern, url: URL): boolean {
   if (pattern.search !== undefined) {
@@ -9,7 +22,7 @@ export function matchLocalPattern(pattern: LocalPattern, url: URL): boolean {
     }
   }
 
-  if (!makeRe(pattern.pathname ?? '**', { dot: true }).test(url.pathname)) {
+  if (!pathnameRe(pattern.pathname ?? '**').test(url.pathname)) {
     return false
   }
 

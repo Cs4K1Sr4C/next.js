@@ -1,6 +1,29 @@
 import type { RemotePattern } from './image-config'
 import { makeRe } from 'next/dist/compiled/picomatch'
 
+// Globs only come from next.config, so these caches stay bounded. makeRe()
+// never sets the g/y flags, so a compiled RegExp can be reused across .test().
+const hostnameRes = new Map<string, RegExp>()
+const pathnameRes = new Map<string, RegExp>()
+
+function hostnameRe(glob: string): RegExp {
+  let re = hostnameRes.get(glob)
+  if (!re) {
+    re = makeRe(glob)
+    hostnameRes.set(glob, re)
+  }
+  return re
+}
+
+function pathnameRe(glob: string): RegExp {
+  let re = pathnameRes.get(glob)
+  if (!re) {
+    re = makeRe(glob, { dot: true })
+    pathnameRes.set(glob, re)
+  }
+  return re
+}
+
 // Modifying this function should also modify writeImagesManifest()
 export function matchRemotePattern(
   pattern: RemotePattern | URL,
@@ -22,7 +45,7 @@ export function matchRemotePattern(
       `Pattern should define hostname but found\n${JSON.stringify(pattern)}`
     )
   } else {
-    if (!makeRe(pattern.hostname).test(url.hostname)) {
+    if (!hostnameRe(pattern.hostname).test(url.hostname)) {
       return false
     }
   }
@@ -34,7 +57,7 @@ export function matchRemotePattern(
   }
 
   // Should be the same as writeImagesManifest()
-  if (!makeRe(pattern.pathname ?? '**', { dot: true }).test(url.pathname)) {
+  if (!pathnameRe(pattern.pathname ?? '**').test(url.pathname)) {
     return false
   }
 
