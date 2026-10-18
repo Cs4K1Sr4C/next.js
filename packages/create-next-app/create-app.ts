@@ -18,7 +18,7 @@ import { isFolderEmpty } from './helpers/is-folder-empty'
 import { getOnline } from './helpers/is-online'
 import { isWriteable } from './helpers/is-writeable'
 import { generateAgentFiles } from './helpers/generate-agent-files'
-import { runTypegen } from './helpers/typegen'
+import { hasNextDependency, runTypegen } from './helpers/typegen'
 
 import type { Bundler, TemplateMode, TemplateType } from './templates'
 import { getTemplateFile, installTemplate } from './templates'
@@ -230,13 +230,15 @@ export async function createApp({
 
       await install(packageManager, isOnline)
       console.log()
-      try {
-        console.log()
-        await runTypegen(packageManager)
-        console.log()
-      } catch (err) {
-        // Best effort: do not fail app creation if typegen fails
-        console.error('Error running typegen:', err)
+      if (hasNextDependency(packageJsonPath)) {
+        try {
+          console.log()
+          await runTypegen(packageManager)
+          console.log()
+        } catch (err) {
+          // Best effort: do not fail app creation if typegen fails
+          console.error('Error running typegen:', err)
+        }
       }
     }
   } else {

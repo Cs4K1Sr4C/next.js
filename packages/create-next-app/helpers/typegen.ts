@@ -1,6 +1,23 @@
 /* eslint-disable import/no-extraneous-dependencies */
 import spawn from 'cross-spawn'
+import { readFileSync } from 'node:fs'
 import type { PackageManager } from './get-pkg-manager'
+
+/**
+ * Whether `next typegen` can run in the directory of `packageJsonPath`.
+ * Workspace examples keep `next` in an app package rather than at the root,
+ * where running it only prints a "command not found" error.
+ */
+export function hasNextDependency(packageJsonPath: string): boolean {
+  try {
+    const { dependencies, devDependencies } = JSON.parse(
+      readFileSync(packageJsonPath, 'utf8')
+    )
+    return Boolean(dependencies?.next || devDependencies?.next)
+  } catch {
+    return false
+  }
+}
 
 /**
  * Runs `next typegen` using the package manager to execute the locally installed Next.js binary.
