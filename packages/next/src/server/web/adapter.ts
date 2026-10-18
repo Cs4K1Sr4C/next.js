@@ -1,7 +1,7 @@
 import type { RequestData, FetchEventResult } from './types'
 import type { RequestInit } from './spec-extension/request'
 import { PageSignatureError } from './error'
-import { fromNodeOutgoingHttpHeaders, normalizeNextQueryParam } from './utils'
+import { fromNodeOutgoingHttpHeaders, normalizeNextQueryParams } from './utils'
 import {
   NextFetchEvent,
   getWaitUntilPromiseFromEvent,
@@ -143,21 +143,7 @@ export async function adapter(
         nextConfig: params.request.nextConfig,
       })
 
-  // Iterator uses an index to keep track of the current iteration. Because of deleting and appending below we can't just use the iterator.
-  // Instead we use the keys before iteration.
-  const keys = [...requestURL.searchParams.keys()]
-  for (const key of keys) {
-    const value = requestURL.searchParams.getAll(key)
-
-    const normalizedKey = normalizeNextQueryParam(key)
-    if (normalizedKey) {
-      requestURL.searchParams.delete(normalizedKey)
-      for (const val of value) {
-        requestURL.searchParams.append(normalizedKey, val)
-      }
-      requestURL.searchParams.delete(key)
-    }
-  }
+  normalizeNextQueryParams(requestURL)
 
   // Ensure users only see page requests, never data requests.
   let buildId = process.env.__NEXT_BUILD_ID || ''
