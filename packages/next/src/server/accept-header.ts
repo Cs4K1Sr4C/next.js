@@ -109,8 +109,15 @@ function parse(
   }
 
   const preferred: string[] = []
+  let wildcardExpanded = false
   for (const selection of values) {
     if (selection === '*') {
+      // Every `*` expands to the same list (`map` and `lowers` are fixed
+      // here), so later ones would only append duplicates.
+      if (wildcardExpanded) {
+        continue
+      }
+      wildcardExpanded = true
       for (const [preference, value] of lowers) {
         if (!map.has(preference)) {
           preferred.push(value.orig)
