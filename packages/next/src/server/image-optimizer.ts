@@ -62,7 +62,7 @@ export { ImageError } from './image-optimizer/image-error'
 
 type XCacheHeader = 'MISS' | 'HIT' | 'STALE'
 
-const CACHE_VERSION = 4
+const CACHE_VERSION = 5
 const BLUR_IMG_SIZE = 8 // should match `next-image-loader`
 const BLUR_QUALITY = 70 // should match `next-image-loader`
 
@@ -222,11 +222,15 @@ export class ImageOptimizerCache {
     if (url.startsWith('/')) {
       href = url
       isAbsolute = false
-      if (
-        /\/_next\/image($|\/)/.test(
-          decodeURIComponent(parseUrl(url)?.pathname ?? '')
-        )
-      ) {
+      let decodedPathname: string
+      try {
+        decodedPathname = decodeURIComponent(parseUrl(url)?.pathname ?? '')
+      } catch {
+        // Malformed percent-encoding (URIError). Recursion cannot be ruled out
+        // without decoding, so reject instead of testing the raw pathname.
+        return { errorMessage: '"url" parameter is invalid' }
+      }
+      if (/\/_next\/image($|\/)/.test(decodedPathname)) {
         return {
           errorMessage: '"url" parameter cannot be recursive',
         }
@@ -348,7 +352,11 @@ export class ImageOptimizerCache {
     quality: number
     mimeType: string
   }): string {
-    return getHash([CACHE_VERSION, href, width, quality, mimeType])
+    // JSON-encode the fields so adjacent values cannot run together. With plain
+    // concatenation, ("/a/1", w=2048) and ("/a/120", w=48) hash identically.
+    return getHash([
+      JSON.stringify([CACHE_VERSION, href, width, quality, mimeType]),
+    ])
   }
 
   constructor({
