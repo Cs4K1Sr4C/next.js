@@ -45,6 +45,20 @@ function unescapeSegments(str: string) {
   return str.replace(/__ESC_COLON_/gi, ':')
 }
 
+// `has`/`missing` values come from config and manifests, so this stays small;
+// the cap is a guard.
+const hasValueRegexCache = new Map<string, RegExp>()
+
+function getHasValueRegex(value: string): RegExp {
+  let regex = hasValueRegexCache.get(value)
+  if (regex === undefined) {
+    regex = new RegExp(`^${value}$`)
+    if (hasValueRegexCache.size >= 1000) hasValueRegexCache.clear()
+    hasValueRegexCache.set(value, regex)
+  }
+  return regex
+}
+
 export function matchHas(
   req: BaseNextRequest | IncomingMessage,
   query: Params,
@@ -93,7 +107,8 @@ export function matchHas(
       params[getSafeParamName(key!)] = value
       return true
     } else if (value) {
-      const matcher = new RegExp(`^${hasItem.value}$`)
+      // hasItem.value is truthy here, the branch above handles a falsy one
+      const matcher = getHasValueRegex(hasItem.value!)
       const matches = Array.isArray(value)
         ? value.slice(-1)[0].match(matcher)
         : value.match(matcher)
@@ -123,6 +138,11 @@ export function matchHas(
   }
   return false
 }
+
+// compileNonPath runs per request (e.g. for each custom header value), but the
+// compiled function depends only on the escaped string and is pure. Inputs are
+// derived from config, so this stays small; the cap is a guard.
+const nonPathCompilerCache = new Map<string, ReturnType<typeof safeCompile>>()
 
 export function compileNonPath(value: string, params: Params): string {
   if (!value.includes(':')) {
@@ -156,7 +176,14 @@ export function compileNonPath(value: string, params: Params): string {
 
   // the value needs to start with a forward-slash to be compiled
   // correctly
-  return safeCompile(`/${value}`, { validate: false })(params).slice(1)
+  const route = `/${value}`
+  let compiler = nonPathCompilerCache.get(route)
+  if (compiler === undefined) {
+    compiler = safeCompile(route, { validate: false })
+    if (nonPathCompilerCache.size >= 1000) nonPathCompilerCache.clear()
+    nonPathCompilerCache.set(route, compiler)
+  }
+  return compiler(params).slice(1)
 }
 
 export function parseDestination(args: {

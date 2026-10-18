@@ -14,13 +14,27 @@ export interface MiddlewareRouteMatch {
 export function getMiddlewareRouteMatcher(
   matchers: ProxyMatcher[]
 ): MiddlewareRouteMatch {
+  // Compile each matcher's regexp once (and again only if its source changes)
+  // instead of on every call. The regexps carry no g/y flag, so reuse is
+  // stateless. Compilation stays lazy, so an invalid regexp still only throws
+  // when it is reached while matching.
+  const compiled: Array<{ source: string; regexp: RegExp } | undefined> = []
+
   return (
     pathname: string | null | undefined,
     req: BaseNextRequest,
     query: Params
   ) => {
-    for (const matcher of matchers) {
-      const routeMatch = new RegExp(matcher.regexp).exec(pathname!)
+    for (let i = 0; i < matchers.length; i++) {
+      const matcher = matchers[i]
+      let entry = compiled[i]
+      if (entry === undefined || entry.source !== matcher.regexp) {
+        entry = compiled[i] = {
+          source: matcher.regexp,
+          regexp: new RegExp(matcher.regexp),
+        }
+      }
+      const routeMatch = entry.regexp.exec(pathname!)
       if (!routeMatch) {
         continue
       }
