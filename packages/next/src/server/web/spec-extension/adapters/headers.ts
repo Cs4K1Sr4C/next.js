@@ -132,6 +132,13 @@ export class HeadersAdapter extends Headers {
           return ReflectAdapter.get(target, prop, receiver)
         }
 
+        // An exact key match is the key the scan below would find, assuming
+        // there are no mixed case keys. Skipping the scan keeps lookups constant
+        // time and iterating the headers linear.
+        if (Object.prototype.propertyIsEnumerable.call(target, prop)) {
+          return ReflectAdapter.get(target, prop, receiver)
+        }
+
         const lowercased = prop.toLowerCase()
 
         // Let's find the original casing of the key. This assumes that there is

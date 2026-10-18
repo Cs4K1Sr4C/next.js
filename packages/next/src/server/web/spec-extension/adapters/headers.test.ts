@@ -222,6 +222,133 @@ describe('HeadersAdapter', () => {
       // Ensure the original headers object was mutated.
       expect(incoming['X-Custom-Header']).toBe('custom2')
     })
+
+    it('should return the value of the first case-insensitive key match', () => {
+      // The reference lookup: the first key whose lowercase form matches.
+      function scan(raw: IncomingHttpHeaders, name: string): string | null {
+        const lowercased = name.toLowerCase()
+        const original = Object.keys(raw).find(
+          (key) => key.toLowerCase() === lowercased
+        )
+        if (typeof original === 'undefined') return null
+
+        const value = raw[original]
+        if (typeof value === 'undefined') return null
+
+        return Array.isArray(value) ? value.join(', ') : value
+      }
+
+      const nonEnumerable: IncomingHttpHeaders = { 'content-type': 'text/html' }
+      Object.defineProperty(nonEnumerable, 'x-non-enumerable', {
+        value: 'hidden',
+        enumerable: false,
+        configurable: true,
+      })
+
+      const inputs: IncomingHttpHeaders[] = [
+        {
+          'content-type': 'application/json',
+          'set-cookie': ['a=1', 'b=2'],
+          'x-empty': '',
+          'x-undefined': undefined,
+        },
+        { 'Content-Type': 'application/json', 'X-Custom-Header': 'custom' },
+        JSON.parse('{"__proto__":"own-proto","constructor":"own-ctor"}'),
+        nonEnumerable,
+        Object.assign(Object.create(null), { 'x-null-proto': 'yes' }),
+        {},
+      ]
+      const names = [
+        'content-type',
+        'Content-Type',
+        'CONTENT-TYPE',
+        'set-cookie',
+        'x-empty',
+        'x-undefined',
+        'x-custom-header',
+        'X-Custom-Header',
+        'x-non-enumerable',
+        'x-null-proto',
+        '__proto__',
+        'constructor',
+        'toString',
+        'hasOwnProperty',
+        'missing',
+        '',
+      ]
+
+      for (const raw of inputs) {
+        const headers = new HeadersAdapter(raw)
+        for (const name of names) {
+          expect([name, headers.get(name)]).toEqual([name, scan(raw, name)])
+          expect([name, headers.has(name)]).toEqual([
+            name,
+            scan(raw, name) !== null,
+          ])
+        }
+
+        expect(Array.from(headers.entries())).toEqual(
+          Object.keys(raw).map((key) => [key.toLowerCase(), scan(raw, key)])
+        )
+        expect(Array.from(headers.values())).toEqual(
+          Object.keys(raw).map((key) => scan(raw, key))
+        )
+      }
+    })
+  })
+
+  describe('iteration', () => {
+    function createCountingHeaders(size: number) {
+      const raw: IncomingHttpHeaders = {}
+      for (let i = 0; i < size; i++) {
+        raw[`x-header-${i}`] = `value-${i}`
+      }
+
+      // Counts how often the header names are listed. Each listing walks every
+      // key, so iteration must list them once rather than once per header.
+      const counter = { ownKeys: 0 }
+      const counted = new Proxy(raw, {
+        ownKeys(target) {
+          counter.ownKeys++
+          return Reflect.ownKeys(target)
+        },
+      })
+
+      return { raw, counter, headers: new HeadersAdapter(counted) }
+    }
+
+    it('should list the header names once per full iteration', () => {
+      const { raw, counter, headers } = createCountingHeaders(1000)
+      const expected = Object.entries(raw)
+
+      counter.ownKeys = 0
+      expect(Array.from(headers.entries())).toEqual(expected)
+      expect(counter.ownKeys).toBe(1)
+
+      counter.ownKeys = 0
+      expect(Array.from(headers.values())).toEqual(
+        expected.map(([, value]) => value)
+      )
+      expect(counter.ownKeys).toBe(1)
+
+      const sealed = HeadersAdapter.seal(headers, new Set(['rsc']))
+      counter.ownKeys = 0
+      expect(Object.fromEntries(sealed)).toEqual(raw)
+      expect(counter.ownKeys).toBe(1)
+    })
+
+    it('should not list the header names for an exact lookup', () => {
+      const { counter, headers } = createCountingHeaders(1000)
+
+      counter.ownKeys = 0
+      expect(headers.get('x-header-999')).toBe('value-999')
+      expect(headers.has('x-header-0')).toBe(true)
+      expect(counter.ownKeys).toBe(0)
+
+      // Lookups that are not an exact key still match case-insensitively.
+      expect(headers.get('X-Header-999')).toBe('value-999')
+      expect(headers.get('x-header-1000')).toBeNull()
+    })
   })
 
   describe('sealed', () => {
