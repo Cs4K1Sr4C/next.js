@@ -245,15 +245,22 @@ export async function pipeNodeReadableToNodeResponse(
     })
 
     readable.on('end', async () => {
-      if (waitUntilForEnd) {
-        await waitUntilForEnd
-      }
+      try {
+        if (waitUntilForEnd) {
+          await waitUntilForEnd
+        }
+      } catch (err) {
+        // The body has been fully written. A failed background write awaited
+        // via waitUntil (e.g. a cache handler `set()`) must not leave the
+        // response open; report it like the page-render AwaiterOnce does.
+        console.error(err)
+      } finally {
+        if (!res.writableFinished) {
+          res.end()
+        }
 
-      if (!res.writableFinished) {
-        res.end()
+        finished.resolve()
       }
-
-      finished.resolve()
     })
 
     readable.on('error', (err) => {

@@ -276,3 +276,70 @@ describe('client component loading measurement at first write', () => {
     }
   )
 })
+
+describe('pipeNodeReadableToNodeResponse waitUntilForEnd', () => {
+  let server: http.Server | undefined
+  let errorSpy: jest.SpyInstance
+
+  beforeEach(() => {
+    errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+  })
+
+  afterEach(async () => {
+    errorSpy.mockRestore()
+    if (server) {
+      server.closeAllConnections()
+      await new Promise<void>((resolve) => server!.close(() => resolve()))
+      server = undefined
+    }
+  })
+
+  it('waits for waitUntilForEnd to resolve before ending the response', async () => {
+    let settled = false
+    let piped!: Promise<void>
+    server = http.createServer((_req, res) => {
+      const waitUntil = new Promise<void>((resolve) =>
+        setTimeout(() => {
+          settled = true
+          resolve()
+        }, 20)
+      )
+      piped = pipeNodeReadableToNodeResponse(
+        Readable.from([Buffer.from('0:"ok"\n')]),
+        res,
+        waitUntil
+      )
+    })
+
+    const url = await listen(server)
+    const res = await fetch(url, { signal: AbortSignal.timeout(2000) })
+    expect(await res.text()).toBe('0:"ok"\n')
+    expect(settled).toBe(true)
+    await expect(piped).resolves.toBeUndefined()
+    expect(errorSpy).not.toHaveBeenCalled()
+  })
+
+  it('ends the response when waitUntilForEnd rejects', async () => {
+    let piped!: Promise<void>
+    server = http.createServer((_req, res) => {
+      const waitUntil = new Promise<void>((_, reject) =>
+        setTimeout(() => reject(new Error('cache write failed')), 20)
+      )
+      piped = pipeNodeReadableToNodeResponse(
+        Readable.from([Buffer.from('0:"ok"\n')]),
+        res,
+        waitUntil
+      )
+    })
+
+    const url = await listen(server)
+    // Without the fix the body never completes, so this rejects with a
+    // TimeoutError instead of resolving.
+    const res = await fetch(url, { signal: AbortSignal.timeout(2000) })
+    expect(await res.text()).toBe('0:"ok"\n')
+    await expect(piped).resolves.toBeUndefined()
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'cache write failed' })
+    )
+  })
+})
