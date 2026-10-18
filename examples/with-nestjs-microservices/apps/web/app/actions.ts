@@ -56,6 +56,11 @@ export async function createOrderAction(
       revalidatePath("/");
       return { status: "error", message: result.message, fields };
     }
+    if (result.status === 503 || result.status === 504) {
+      // The order may have been stored even though no answer arrived.
+      // Re-rendering shows it if so, and the kept key makes a retry safe.
+      revalidatePath("/");
+    }
     return {
       status: "error",
       message: result.message,

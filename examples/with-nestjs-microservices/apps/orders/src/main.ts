@@ -8,7 +8,14 @@ const app = await NestFactory.createMicroservice<MicroserviceOptions>(
   AppModule,
   {
     transport: Transport.REDIS,
-    options: redisConnectionOptions(),
+    options: {
+      ...redisConnectionOptions(),
+      // Without retry options the transport's pub/sub connections give up
+      // after the first disconnect: the process keeps running but never
+      // answers another request.
+      retryAttempts: Number.MAX_SAFE_INTEGER,
+      retryDelay: 1000,
+    },
   },
 );
 

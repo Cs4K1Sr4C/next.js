@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
   FULFILL_JOB,
+  FULFILLMENT_BACKOFF,
   FULFILLMENT_QUEUE,
   RpcErrorCode,
   type CreateOrderInput,
@@ -17,9 +18,13 @@ import { rpcError } from "../rpc/rpc-error.js";
 import { OrdersRepository } from "./orders.repository.js";
 
 const LIST_LIMIT = 50;
+// Transient failures are retried for about an hour and a half, at most once a
+// minute (see fulfillmentRetryDelay), so an outage of the orders service or
+// the carrier does not strand orders. A job that still fails stays in
+// BullMQ's failed set, where it can be inspected and retried.
 const FULFILL_JOB_OPTIONS: JobsOptions = {
-  attempts: 5,
-  backoff: { type: "exponential", delay: 1000 },
+  attempts: 100,
+  backoff: { type: FULFILLMENT_BACKOFF },
   removeOnComplete: 1000,
   removeOnFail: 5000,
 };
@@ -36,6 +41,7 @@ export class OrdersService {
 
   async create(
     ctx: RpcContext,
+    deliveryId: string,
     idempotencyKey: string,
     input: CreateOrderInput,
   ): Promise<CreateOrderResponse> {
@@ -53,6 +59,7 @@ export class OrdersService {
     const result = await this.orders.createIdempotent(order, {
       key: idempotencyKey,
       fingerprint,
+      deliveryId,
     });
     if (result.created) {
       await this.enqueueFulfillment(ctx, order);
@@ -82,8 +89,14 @@ export class OrdersService {
       // A transactional outbox would close the gap without needing a retry.
       await this.enqueueFulfillment(ctx, original);
     }
-    this.log(ctx, `Replayed order ${original.id}`);
-    return { order: original, replayed: true };
+    // Every orders instance receives each request, so the instance that lost
+    // the race for this delivery lands here too. Only a different delivery is
+    // a client retry.
+    const replayed = result.existing.deliveryId !== deliveryId;
+    if (replayed) {
+      this.log(ctx, `Replayed order ${original.id}`);
+    }
+    return { order: original, replayed };
   }
 
   async list(ctx: RpcContext): Promise<ListOrdersResponse> {

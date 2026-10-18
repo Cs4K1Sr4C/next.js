@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { Body, Controller, Get, HttpStatus, Post, Res } from "@nestjs/common";
 import type { Response } from "express";
 import {
@@ -40,6 +41,7 @@ export class OrdersController {
   ): Promise<CreateOrderResponse> {
     const result = await this.orders.create({
       ctx: { tenantId, requestId },
+      deliveryId: randomUUID(),
       idempotencyKey,
       input,
     });

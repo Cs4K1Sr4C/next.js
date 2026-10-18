@@ -1,5 +1,6 @@
 import {
   CreateOrderInput,
+  DeliveryId,
   IdempotencyKey,
   Order,
   OrdersPatterns,
@@ -21,11 +22,12 @@ export class OrdersController {
   @MessagePattern(OrdersPatterns.Create)
   create(
     @Payload("ctx", { schema: RpcContext }) ctx: RpcContext,
+    @Payload("deliveryId", { schema: DeliveryId }) deliveryId: string,
     @Payload("idempotencyKey", { schema: IdempotencyKey })
     idempotencyKey: string,
     @Payload("input", { schema: CreateOrderInput }) input: CreateOrderInput,
   ): Promise<CreateOrderResponse> {
-    return this.orders.create(ctx, idempotencyKey, input);
+    return this.orders.create(ctx, deliveryId, idempotencyKey, input);
   }
 
   /** Handles a `ListOrdersQuery`. */

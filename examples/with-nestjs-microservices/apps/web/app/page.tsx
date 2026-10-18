@@ -13,6 +13,7 @@ const createdAtFormat = new Intl.DateTimeFormat("en-US", {
 export default async function Page() {
   await connection();
   const result = await listOrders();
+  const pending = result.ok ? pendingIds(result.data.orders) : "";
 
   return (
     <main>
@@ -36,9 +37,9 @@ export default async function Page() {
           <>
             <OrdersTable orders={result.data.orders} />
             <AutoRefresh
-              active={result.data.orders.some(
-                (order) => order.status === "pending",
-              )}
+              // A new set of pending orders remounts it, restarting polling.
+              key={pending}
+              active={pending !== ""}
             />
           </>
         ) : (
@@ -52,6 +53,13 @@ export default async function Page() {
       </section>
     </main>
   );
+}
+
+function pendingIds(orders: Order[]): string {
+  return orders
+    .filter((order) => order.status === "pending")
+    .map((order) => order.id)
+    .join(",");
 }
 
 function OrdersTable({ orders }: { orders: Order[] }) {

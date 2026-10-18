@@ -4,13 +4,13 @@
     "build": "pnpm --filter @example/contracts build && pnpm --filter \"./apps/*\" build",
     "dev": "pnpm --filter @example/contracts build && pnpm --parallel --filter @example/contracts --filter \"./apps/*\" dev",
     "start": "pnpm --parallel --filter \"./apps/*\" start",
-    "lint:boundaries": "depcruise apps packages",
+    "lint:boundaries": "pnpm --filter @example/contracts build && depcruise apps packages",
     "smoke": "node scripts/smoke.mjs"
   },
   "devDependencies": {
     "dependency-cruiser": "^18.6.0"
   },
   "engines": {
-    "node": ">=20.19.0"
+    "node": "^22.13.0 || ^24.0.0 || >=26.0.0"
   }
 }

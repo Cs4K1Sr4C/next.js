@@ -4,12 +4,14 @@ export interface IdempotencyClaim {
   key: string;
   /** Hash of the validated input, to detect a key reused for another body. */
   fingerprint: string;
+  deliveryId: string;
 }
 
 /** What an idempotency key remembers about the request that first used it. */
 export interface IdempotencyRecord {
   orderId: string;
   fingerprint: string;
+  deliveryId: string;
 }
 
 export type CreateIdempotentResult =

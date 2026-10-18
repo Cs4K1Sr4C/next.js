@@ -1,5 +1,7 @@
 import "server-only";
+import { headers as requestHeaders } from "next/headers";
 import {
+  ClientId,
   HttpHeaders,
   type CreateOrderInput,
   type CreateOrderResponse,
@@ -11,7 +13,9 @@ import {
 // build error, so it can never end up in a browser bundle.
 const GATEWAY_URL = process.env.GATEWAY_URL ?? "http://127.0.0.1:4000";
 const GATEWAY_TOKEN = process.env.GATEWAY_TOKEN ?? "dev-token-acme";
-const REQUEST_TIMEOUT_MS = 5000;
+// Longer than the gateway's own 5s timeout for the orders service, so that
+// its 504 reaches the user instead of this timer firing first.
+const REQUEST_TIMEOUT_MS = 8000;
 
 export interface GatewayFailure {
   ok: false;
@@ -44,17 +48,32 @@ interface RequestOptions {
   body?: unknown;
 }
 
+/**
+ * The visitor this request is made for, so that the gateway can rate-limit
+ * each visitor separately. The first `x-forwarded-for` entry is the visitor's
+ * address only behind a proxy that sets the header, as Vercel does (with
+ * nginx, set it from `$remote_addr`). Without such a proxy visitors can choose
+ * the value, which is why the gateway also caps each tenant as a whole.
+ */
+async function clientId(): Promise<string | undefined> {
+  const forwardedFor = (await requestHeaders()).get("x-forwarded-for");
+  const candidate = ClientId.safeParse(forwardedFor?.split(",")[0]?.trim());
+  return candidate.success ? candidate.data : undefined;
+}
+
 async function request<T>(
   path: string,
   { method = "GET", headers = {}, body }: RequestOptions = {},
 ): Promise<GatewayResult<T>> {
   const requestId = crypto.randomUUID();
+  const client = await clientId();
   try {
     const response = await fetch(new URL(path, GATEWAY_URL), {
       method,
       headers: {
         authorization: `Bearer ${GATEWAY_TOKEN}`,
         [HttpHeaders.RequestId]: requestId,
+        ...(client === undefined ? {} : { [HttpHeaders.ClientId]: client }),
         ...(body === undefined ? {} : { "content-type": "application/json" }),
         ...headers,
       },
@@ -81,6 +100,11 @@ async function request<T>(
       `Gateway ${method} ${path} failed (requestId=${requestId})`,
       error,
     );
+    // Like the gateway's own 504, a timeout leaves the outcome unknown: the
+    // order may have been stored. Report it the same way.
+    if (error instanceof DOMException && error.name === "TimeoutError") {
+      return { ok: false, status: 504, message: MESSAGE_BY_STATUS[504] };
+    }
     return UNAVAILABLE;
   }
 }

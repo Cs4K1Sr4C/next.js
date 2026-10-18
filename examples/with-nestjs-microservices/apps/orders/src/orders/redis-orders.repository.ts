@@ -63,6 +63,7 @@ export class RedisOrdersRepository implements OrdersRepository {
     const record: IdempotencyRecord = {
       orderId: order.id,
       fingerprint: idempotency.fingerprint,
+      deliveryId: idempotency.deliveryId,
     };
     const existing = await this.redis.eval(
       CREATE_IDEMPOTENT,

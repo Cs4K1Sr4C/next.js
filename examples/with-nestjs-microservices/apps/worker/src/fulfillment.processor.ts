@@ -3,6 +3,7 @@ import {
   FULFILLMENT_QUEUE,
   ORDERS_SERVICE,
   OrdersPatterns,
+  fulfillmentRetryDelay,
   isRpcErrorPayload,
   type FulfillmentJob,
   type MarkFulfilledCommand,
@@ -23,7 +24,12 @@ const CARRIER_FAILURE_RATE = fractionFromEnv("FULFILLMENT_FAILURE_RATE", 0);
 // silence into a failed attempt that BullMQ can retry.
 const CONFIRM_TIMEOUT_MS = 5000;
 
-@Processor(FULFILLMENT_QUEUE, { concurrency: CONCURRENCY })
+@Processor(FULFILLMENT_QUEUE, {
+  concurrency: CONCURRENCY,
+  // Computes the delay for the custom backoff type that the orders service
+  // sets on every job.
+  settings: { backoffStrategy: fulfillmentRetryDelay },
+})
 export class FulfillmentProcessor
   extends WorkerHost
   implements BeforeApplicationShutdown
@@ -44,12 +50,16 @@ export class FulfillmentProcessor
 
   async process(job: Job<FulfillmentJob>): Promise<void> {
     const { tenantId, orderId, requestId } = job.data;
-    await this.shipWithCarrier();
 
-    // BullMQ delivers a job at least once: a failed or timed-out confirmation
-    // is retried, and so is a job whose worker died before acknowledging it.
-    // That is safe because MarkFulfilled is idempotent. The worker never
-    // writes the order itself, since the orders service owns that data.
+    // BullMQ delivers a job at least once: a failed or timed-out attempt is
+    // retried, and so is a job whose worker died before acknowledging it, so
+    // both steps below can run more than once for the same order. That is
+    // safe only because each is idempotent: the carrier deduplicates on the
+    // order id, and MarkFulfilled leaves a fulfilled order unchanged.
+    await this.shipWithCarrier(orderId);
+
+    // The worker never writes the order itself, since the orders service owns
+    // that data.
     const reply = this.orders
       .send(OrdersPatterns.MarkFulfilled, {
         ctx: { tenantId, requestId },
@@ -100,8 +110,13 @@ export class FulfillmentProcessor
     this.logger.error(`Worker error: ${error.message}`, error.stack);
   }
 
-  /** Stands in for a call to a shipping carrier's API. */
-  private async shipWithCarrier(): Promise<void> {
+  /**
+   * Stands in for a call to a shipping carrier's API. A real carrier must
+   * receive `idempotencyKey` (for example as an Idempotency-Key header or a
+   * client reference) so that a retried attempt does not ship twice.
+   */
+  private async shipWithCarrier(idempotencyKey: string): Promise<void> {
+    this.logger.debug(`Shipping with idempotency key ${idempotencyKey}`);
     await sleep(CARRIER_DELAY_MS);
     if (Math.random() < CARRIER_FAILURE_RATE) {
       throw new Error("Simulated carrier outage");

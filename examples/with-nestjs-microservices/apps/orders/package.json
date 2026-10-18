@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "nest build",
-    "dev": "nest start --watch",
+    "dev": "nest start --watch --exec \"node --watch-path=../../packages/contracts/dist\"",
     "start": "node dist/main.js"
   },
   "dependencies": {
