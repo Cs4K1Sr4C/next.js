@@ -57,6 +57,7 @@ import { NEXT_PATCH_SYMBOL } from './patch-fetch'
 import type { ServerInitResult } from './render-server'
 import { filterInternalHeaders } from './server-ipc/utils'
 import { blockCrossSiteDEV } from './router-utils/block-cross-site-dev'
+import { isInvalidRequestTarget } from './router-utils/is-invalid-request-target'
 import { traceGlobals } from '../../trace/shared'
 import { NoFallbackError } from '../../shared/lib/no-fallback-error.external'
 import {
@@ -363,6 +364,12 @@ export async function initialize(opts: {
     // internal headers should not be honored by the request handler
     if (!process.env.NEXT_PRIVATE_TEST_HEADERS) {
       filterInternalHeaders(req.headers)
+    }
+
+    if (isInvalidRequestTarget(req.url)) {
+      res.statusCode = 400
+      res.end('Bad Request')
+      return
     }
 
     if (opts.dev && req.url) {
@@ -1054,6 +1061,10 @@ export async function initialize(opts: {
         // TODO: log socket errors?
         // console.error(_err);
       })
+
+      if (isInvalidRequestTarget(req.url)) {
+        return socket.end()
+      }
 
       if (opts.dev && development && req.url) {
         if (
