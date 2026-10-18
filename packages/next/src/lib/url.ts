@@ -25,6 +25,9 @@ export function parseReqUrl(url: string): UrlWithParsedQuery | undefined {
   const query: Record<string, string | string[]> = {}
 
   for (const key of parsedUrl.searchParams.keys()) {
+    // Assigning an array to `__proto__` would replace the object's prototype
+    // instead of creating a key, so skip it.
+    if (key === '__proto__') continue
     const values = parsedUrl.searchParams.getAll(key)
     query[key] = values.length > 1 ? values : values[0]
   }

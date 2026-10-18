@@ -38,7 +38,15 @@ export function searchParamsToUrlQuery(
 ): ParsedUrlQuery {
   const query: ParsedUrlQuery = {}
   for (const [key, value] of searchParams.entries()) {
-    const existing = query[key]
+    // Assigning `__proto__` would replace the object's prototype instead of
+    // creating a key (it never becomes an own key), so skip it.
+    if (key === '__proto__') continue
+    // Only own properties are previously seen values. Otherwise keys like
+    // `constructor` or `toString` would pick up the inherited
+    // Object.prototype member.
+    const existing = Object.prototype.hasOwnProperty.call(query, key)
+      ? query[key]
+      : undefined
     if (typeof existing === 'undefined') {
       query[key] = value
     } else if (Array.isArray(existing)) {
